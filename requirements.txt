@@ -1,0 +1,22 @@
+# Core runtime
+pygame-ce>=2.3.0
+psutil>=5.9.5
+pillow>=10.0.0
+simpleaudio>=1.0.4
+pyttsx3>=2.90
+
+# Optional / runtime (will be used if installed & models present)
+vosk>=0.3.45    # offline STT (requires a model in assets/models/vosk)
+pyaudio>=0.2.13 # microphone I/O (system portaudio required)
+
+# Utilities used by some modules
+pyperclip>=1.8.2
+apscheduler>=3.10.1
+
+# Vision (optional)
+opencv-python-headless>=4.8.1
+pytesseract>=0.3.10
+pyzbar>=0.1.8
+
+# Development / testing
+pytest>=7.3.1

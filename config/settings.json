@@ -1,0 +1,26 @@
+{
+  "assistant_name": "CortanaLocal",
+  "voice": {
+    "piper_cmd": "piper", 
+    "pyttsx3_rate": 150,
+    "volume": 0.9
+  },
+  "vosk_model_path": "assets/models/vosk",
+  "openwakeword_model": "assets/wakeword/model.pmdl",
+  "assets": {
+    "sounds": "assets/sounds",
+    "avatar": "assets/avatar"
+  },
+  "database": {
+    "memory": "database/memory.db",
+    "notes": "database/notes.db",
+    "history": "database/history.db"
+  },
+  "dry_run": true,
+  "log_level": "INFO",
+  "ui": {
+    "enabled": true,
+    "width": 480,
+    "height": 240
+  }
+}

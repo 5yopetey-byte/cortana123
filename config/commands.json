@@ -1,0 +1,10 @@
+{
+  "greetings": [
+    "hello",
+    "hi",
+    "hey"
+  ],
+  "open_app": ["open", "launch", "start"],
+  "close_app": ["close", "quit", "kill"],
+  "system_status": ["status", "system status", "how are you"]
+}

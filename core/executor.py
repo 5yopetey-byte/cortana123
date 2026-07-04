@@ -1,12 +1,14 @@
 """Executor routes parsed intents to command modules and handles dry_run safety.
 
-Enhanced: resolves fuzzy app names using app_mappings and installed_apps, uses RapidFuzz if available,
-and requires confirmation for low-confidence matches unless configured otherwise.
+Improvements:
+- Check for executable availability before attempting to launch.
+- Do not call xdg-open on arbitrary non-URL tokens (avoids "xdg-open: file 'chrome' does not exist").
+- Return clear errors listing attempted commands when a binary is missing.
 """
 import shlex
 import subprocess
 import shutil
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 from core.logger import get_logger
 from core.tts import TTSEngine
@@ -111,6 +113,75 @@ class Executor:
 
         return None, None, None
 
+    def _find_executable_variants(self, prog: str) -> List[str]:
+        """Return a list of executable names to try for common programs (fallbacks).
+        Example: 'google-chrome-stable' -> ['google-chrome-stable','google-chrome','chromium','chromium-browser']
+        """
+        prog_base = prog.lower()
+        variants = [prog]
+        if "chrome" in prog_base:
+            variants.extend(["google-chrome", "chromium", "chromium-browser"])
+        if "spotify" in prog_base:
+            variants.extend(["spotify", "flatpak run com.spotify.Client"])
+        if "code" == prog_base or "vscode" in prog_base:
+            variants.extend(["code", "code-oss"])
+        # add more heuristics here as needed
+        # ensure uniqueness while preserving order
+        seen = set()
+        out = []
+        for v in variants:
+            if v not in seen:
+                out.append(v)
+                seen.add(v)
+        return out
+
+    def _is_url(self, s: str) -> bool:
+        return isinstance(s, str) and (s.startswith("http://") or s.startswith("https://"))
+
+    def _exec_command(self, exec_cmd: List[str]) -> Tuple[bool, str]:
+        """Attempt to run exec_cmd (list). Return (success, message).
+        We check which() before launching and try fallbacks for executables.
+        """
+        if not exec_cmd:
+            return False, "No command provided"
+        prog = exec_cmd[0]
+        # Direct URL handling: use xdg-open
+        if self._is_url(prog) or (len(exec_cmd) == 1 and self._is_url(exec_cmd[0])):
+            try:
+                subprocess.Popen(["xdg-open", exec_cmd[0]])
+                return True, f"Opened URL {exec_cmd[0]}"
+            except Exception as exc:
+                return False, f"Failed to open URL {exec_cmd[0]}: {exc}"
+
+        # If program looks like 'xdg-open' (first token), allow it
+        if prog == "xdg-open":
+            try:
+                subprocess.Popen(exec_cmd)
+                return True, f"Ran {' '.join(exec_cmd)}"
+            except Exception as exc:
+                return False, f"Failed to run {' '.join(exec_cmd)}: {exc}"
+
+        # Check whether executable exists in PATH
+        if shutil.which(prog):
+            try:
+                subprocess.Popen(exec_cmd)
+                return True, f"Ran {' '.join(exec_cmd)}"
+            except Exception as exc:
+                return False, f"Failed to run {' '.join(exec_cmd)}: {exc}"
+
+        # Try variants/fallbacks
+        for variant in self._find_executable_variants(prog):
+            # If variant contains spaces (like flatpak run ...), split it
+            parts = shlex.split(variant)
+            if shutil.which(parts[0]):
+                try:
+                    subprocess.Popen(parts)
+                    return True, f"Ran fallback {' '.join(parts)}"
+                except Exception as exc:
+                    return False, f"Failed to run fallback {' '.join(parts)}: {exc}"
+
+        return False, f"Command not found: tried '{prog}' and fallbacks"
+
     def _open_app(self, app_name: str) -> str:
         app_name = (app_name or "").strip()
         if not app_name:
@@ -127,11 +198,9 @@ class Executor:
             # ambiguous/low confidence
             LOGGER.info("Low-confidence match for '%s' -> '%s' (score=%s)", app_name, cmd, score)
             if self._require_confirm_unknown:
-                # ask for confirmation via TTS/console
                 prompt = f"I think you meant {matched}. Say yes to open it."
                 if self.tts:
                     self.tts.speak(prompt)
-                # fallback confirmation via console
                 try:
                     reply = input(f"{prompt} [y/N]: ").strip().lower()
                 except Exception:
@@ -140,40 +209,30 @@ class Executor:
                     return "Cancelled."
             chosen_cmd = cmd
         else:
-            # No good match
             if not self._allow_raw:
                 return f"Unknown application '{app_name}'. I won't run arbitrary commands. Add it to app_mappings or installed_apps to allow launching."
-            chosen_cmd = app_name  # user explicitly allowed raw execution
+            chosen_cmd = app_name
 
-        # If command starts with 'xdg-open ' treat as such; else execute
-        if chosen_cmd.startswith("xdg-open "):
-            parts = shlex.split(chosen_cmd)
-            exec_cmd = parts
+        # Build exec_cmd list
+        if isinstance(chosen_cmd, str) and chosen_cmd.startswith("xdg-open "):
+            exec_cmd = shlex.split(chosen_cmd)
+        elif self._is_url(chosen_cmd):
+            exec_cmd = [chosen_cmd]
+        elif isinstance(chosen_cmd, str) and " " in chosen_cmd:
+            exec_cmd = shlex.split(chosen_cmd)
         else:
-            # split where appropriate
-            if " " in chosen_cmd:
-                exec_cmd = shlex.split(chosen_cmd)
-            else:
-                exec_cmd = [chosen_cmd]
+            exec_cmd = [chosen_cmd]
 
+        # Dry run handling
         if self.dry_run:
             LOGGER.info("[dry_run] Would run: %s", exec_cmd)
             return f"(dry-run) Would open {app_name} -> {' '.join(exec_cmd)}"
 
-        try:
-            subprocess.Popen(exec_cmd)
+        # Execute with checks/fallbacks
+        success, msg = self._exec_command(exec_cmd)
+        if success:
             return f"Opened {app_name}"
-        except FileNotFoundError:
-            # try xdg-open fallback
-            try:
-                subprocess.Popen(["xdg-open", app_name])
-                return f"Opened {app_name} with xdg-open"
-            except Exception as exc:
-                LOGGER.exception("Failed to open %s: %s", app_name, exc)
-                return f"Failed to open {app_name}: {exc}"
-        except Exception as exc:
-            LOGGER.exception("Failed to open %s: %s", app_name, exc)
-            return f"Failed to open {app_name}: {exc}"
+        return f"Failed to open {app_name}: {msg}"
 
     def _close_app(self, app_name: str) -> str:
         app_name = (app_name or "").strip()

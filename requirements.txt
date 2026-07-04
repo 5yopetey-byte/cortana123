@@ -18,5 +18,8 @@ opencv-python-headless>=4.8.1
 pytesseract>=0.3.10
 pyzbar>=0.1.8
 
+# Fuzzy matching
+rapidfuzz>=2.16.0
+
 # Development / testing
 pytest>=7.3.1

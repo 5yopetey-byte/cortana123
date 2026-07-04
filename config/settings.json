@@ -23,8 +23,8 @@
   "fuzzy_threshold": 60,
 
   "app_mappings": {
-    "chrome": "google-chrome-stable",
-    "chrome browser": "google-chrome-stable",
+    "chrome": "xdg-open https://www.google.com",
+    "chrome browser": "xdg-open https://www.google.com",
     "terminal": "gnome-terminal",
     "files": "nautilus",
     "code": "code",

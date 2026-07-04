@@ -16,10 +16,12 @@
     "notes": "database/notes.db",
     "history": "database/history.db"
   },
+
   "dry_run": false,
-  "allow_raw_execution": false,
-  "require_confirmation_for_unknown": true,
+  "allow_raw_execution": true,
+  "require_confirmation_for_unknown": false,
   "fuzzy_threshold": 60,
+
   "app_mappings": {
     "chrome": "google-chrome-stable",
     "chrome browser": "google-chrome-stable",
@@ -46,6 +48,7 @@
     "amazon shopping": "xdg-open https://www.amazon.com",
     "messages": "xdg-open https://messages.google.com/web/conversations"
   },
+
   "installed_apps": [
     "Amazon Shopping",
     "Apk Installer",
@@ -85,6 +88,7 @@
     "XBOX",
     "Zoom"
   ],
+
   "log_level": "INFO",
   "ui": {
     "enabled": true,
